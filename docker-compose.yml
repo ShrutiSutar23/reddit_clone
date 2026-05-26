@@ -1,0 +1,73 @@
+version: '3.9'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# docker-compose.yml
+# Run the entire ThreadFire stack locally with:
+#   docker-compose up --build
+#
+# Services:
+#   db        → PostgreSQL database
+#   backend   → FastAPI Python server
+#   frontend  → Next.js React app
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL Database ────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: threadfire_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB:       reddit_clone
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI Backend ────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: threadfire_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL:                  postgresql://postgres:postgres@db:5432/reddit_clone
+      SECRET_KEY:                    change-this-secret-key-in-production
+      ALGORITHM:                     HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES:   1440
+      DEBUG:                         "False"
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  # ── Next.js Frontend ───────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    container_name: threadfire_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
