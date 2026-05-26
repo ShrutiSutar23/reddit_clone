@@ -1,0 +1,3 @@
+**/node_modules/
+reddit-clone/backend/venv/
+reddit-clone/backend/.env
